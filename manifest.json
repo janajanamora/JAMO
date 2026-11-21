@@ -6,7 +6,7 @@
     "js": "index.js",
     "css": "style.css",
     "author": "Custom",
-    "version": "1.0.0",
-    "description": "Character.AI-style top header showing the current character's avatar and name, with a back/characters button and collapsible SillyTavern toolbar. Built for TauriTavern iOS & SillyTavern.",
+    "version": "1.2.0",
+    "description": "Character.AI-style top header, dynamic 'Message {{char}}...' input placeholder, and single merged left action button for TauriTavern iOS & SillyTavern.",
     "homePage": ""
 }

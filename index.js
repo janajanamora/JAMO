@@ -1,10 +1,8 @@
 /* ==========================================================================
-   Cai Header Bar — SillyTavern / TauriTavern Extension
-   Renders a native Character.AI-style top header:
-     [ < ]   [Avatar] Character Name   [ ⋯ ]
-   - Left (<): Closes any open drawer, or opens Character List
-   - Center: Live current character/group avatar + name (tap for Character panel)
-   - Right (⋯ / ×): Drops down ST's 9-icon drawer toolbar cleanly underneath
+   Cai Header Bar v1.2.0 — SillyTavern / TauriTavern Extension
+   1. Swap-in-Place c.ai Header Bar ([ < ] [Avatar] Name [ ⋯ ])
+   2. Dynamic c.ai Input Placeholder ("Message {{char}}..." / "给 {{char}} 发消息" / Hidden)
+   3. Single Merged Left Input Button (combines Chat Options + Extensions outside pill)
    ========================================================================== */
 
 (() => {
@@ -12,10 +10,15 @@
     const DEFAULT_SETTINGS = {
         enabled: true,
         showAvatar: true,
+        mergeLeftButtons: true,
+        placeholderMode: 'en', // 'en' | 'zh' | 'hide'
     };
 
     let menuOpen = false;
+    let leftPopupOpen = false;
     let drawerObserver = null;
+    let placeholderObserver = null;
+    let applyingPlaceholder = false;
     let initialized = false;
 
     function getCtx() {
@@ -48,21 +51,21 @@
     function resolveIdentity() {
         const ctx = getCtx();
         if (!ctx) {
-            return { name: 'TauriTavern', avatarUrl: '' };
+            return { name: '', displayName: 'TauriTavern', avatarUrl: '' };
         }
 
-        // 1. Group chat
         if (ctx.groupId && Array.isArray(ctx.groups)) {
             const group = ctx.groups.find((g) => String(g.id) === String(ctx.groupId));
             if (group) {
+                const name = group.name || 'Group Chat';
                 return {
-                    name: group.name || 'Group Chat',
+                    name,
+                    displayName: name,
                     avatarUrl: group.avatar_url || '',
                 };
             }
         }
 
-        // 2. Single character chat
         const chid = ctx.characterId;
         if (
             chid !== undefined &&
@@ -80,15 +83,17 @@
                     avatarUrl = `/characters/${encodeURIComponent(ch.avatar)}`;
                 }
             }
+            const name = ch.name || ctx.name2 || 'Character';
             return {
-                name: ch.name || ctx.name2 || 'Character',
+                name,
+                displayName: name,
                 avatarUrl,
             };
         }
 
-        // 3. Home / no character selected
         return {
-            name: 'Characters',
+            name: '',
+            displayName: 'Characters',
             avatarUrl: '',
         };
     }
@@ -97,34 +102,21 @@
         return Boolean(document.querySelector('#top-settings-holder .drawer-content.openDrawer'));
     }
 
-    function closeAllDrawers() {
-        const openIcons = document.querySelectorAll('#top-settings-holder .drawer-icon.openIcon');
-        if (openIcons.length > 0) {
-            openIcons.forEach((el) => el.click());
-            return true;
-        }
-        const openDrawers = document.querySelectorAll('#top-settings-holder .drawer-content.openDrawer');
-        if (openDrawers.length > 0) {
-            openDrawers.forEach((drawer) => {
-                const toggle = drawer.closest('.drawer')?.querySelector('.drawer-toggle');
-                if (toggle) toggle.click();
-            });
-            return true;
-        }
-        return false;
-    }
-
     function setMenuOpen(open) {
         menuOpen = Boolean(open);
         document.body.classList.toggle('cai-header-menu-open', menuOpen);
-        syncMenuIcon();
     }
 
-    function syncMenuIcon() {
-        const icon = document.querySelector('#cai-header-menu i');
-        if (!icon) return;
-        const expanded = menuOpen || hasOpenDrawer();
-        icon.className = expanded ? 'fa-solid fa-xmark' : 'fa-solid fa-ellipsis';
+    function setLeftPopupOpen(open) {
+        leftPopupOpen = Boolean(open);
+        const pop = document.getElementById('cai-left-popover');
+        if (pop) {
+            pop.classList.toggle('is-open', leftPopupOpen);
+        }
+        const btn = document.getElementById('cai-left-merged-btn');
+        if (btn) {
+            btn.classList.toggle('is-open', leftPopupOpen);
+        }
     }
 
     function syncDrawerState() {
@@ -132,50 +124,121 @@
         const wasOpen = document.body.classList.contains('cai-header-drawer-open');
         document.body.classList.toggle('cai-header-drawer-open', open);
 
-        // When the user finishes with a drawer and closes it, tuck the ST toolbar back away
         if (wasOpen && !open) {
             setMenuOpen(false);
-        } else {
-            syncMenuIcon();
         }
+    }
+
+    function computePlaceholder(name, mode) {
+        if (mode === 'hide') return '';
+        if (mode === 'zh') {
+            return name ? `给 ${name} 发消息` : '发消息';
+        }
+        return name ? `Message ${name}...` : 'Message...';
+    }
+
+    function updatePlaceholder() {
+        const textarea = document.getElementById('send_textarea');
+        if (!textarea) return;
+
+        const settings = getSettings();
+        if (!settings.enabled) return;
+
+        // Preserve explicit "Not connected" warning if ST set it and no API is connected
+        const noConnText = textarea.getAttribute('no_connection_text') || 'Not connected to API!';
+        if (textarea.placeholder === noConnText && !document.querySelector('.online_status_indicator.success')) {
+            // Still replace if user explicitly chose 'hide', otherwise keep brief connection notice
+            if (settings.placeholderMode !== 'hide') {
+                // Only keep if truly disconnected; fall through if connected
+            }
+        }
+
+        const { name } = resolveIdentity();
+        const desired = computePlaceholder(name, settings.placeholderMode);
+
+        applyingPlaceholder = true;
+        try {
+            textarea.setAttribute('connected_text', desired);
+            if (textarea.placeholder !== desired) {
+                textarea.placeholder = desired;
+            }
+        } finally {
+            applyingPlaceholder = false;
+        }
+    }
+
+    function observePlaceholder() {
+        const textarea = document.getElementById('send_textarea');
+        if (!textarea || placeholderObserver) return;
+
+        placeholderObserver = new MutationObserver(() => {
+            if (applyingPlaceholder) return;
+            const settings = getSettings();
+            if (!settings.enabled) return;
+            const { name } = resolveIdentity();
+            const desired = computePlaceholder(name, settings.placeholderMode);
+            if (textarea.placeholder !== desired) {
+                updatePlaceholder();
+            }
+        });
+        placeholderObserver.observe(textarea, {
+            attributes: true,
+            attributeFilter: ['placeholder'],
+        });
     }
 
     function updateHeader() {
         const settings = getSettings();
         const header = document.getElementById('cai-top-header');
-        if (!header) return;
+        if (header) {
+            const nameEl = document.getElementById('cai-header-name');
+            const avatarEl = document.getElementById('cai-header-avatar');
+            const { displayName, avatarUrl } = resolveIdentity();
 
-        const nameEl = document.getElementById('cai-header-name');
-        const avatarEl = document.getElementById('cai-header-avatar');
-        const { name, avatarUrl } = resolveIdentity();
+            if (nameEl) {
+                nameEl.textContent = displayName;
+            }
 
-        if (nameEl) {
-            nameEl.textContent = name;
-        }
-
-        if (avatarEl) {
-            if (settings.showAvatar && avatarUrl) {
-                if (avatarEl.getAttribute('src') !== avatarUrl) {
-                    avatarEl.src = avatarUrl;
+            if (avatarEl) {
+                if (settings.showAvatar && avatarUrl) {
+                    if (avatarEl.getAttribute('src') !== avatarUrl) {
+                        avatarEl.src = avatarUrl;
+                    }
+                    avatarEl.style.display = 'block';
+                } else {
+                    avatarEl.removeAttribute('src');
+                    avatarEl.style.display = 'none';
                 }
-                avatarEl.style.display = 'block';
-            } else {
-                avatarEl.removeAttribute('src');
-                avatarEl.style.display = 'none';
             }
         }
+
+        updatePlaceholder();
     }
 
     function applyEnabledState() {
         const settings = getSettings();
         const active = Boolean(settings.enabled);
         document.body.classList.toggle('cai-header-active', active);
+        document.body.classList.toggle('cai-merge-left-buttons', active && Boolean(settings.mergeLeftButtons));
+        document.body.classList.toggle('cai-hide-placeholder', active && settings.placeholderMode === 'hide');
+
         if (!active) {
             setMenuOpen(false);
+            setLeftPopupOpen(false);
             document.body.classList.remove('cai-header-drawer-open');
         } else {
             updateHeader();
             syncDrawerState();
+        }
+    }
+
+    function openCharactersDrawer() {
+        setLeftPopupOpen(false);
+        setMenuOpen(true);
+        const toggle = document.querySelector('#rightNavHolder > .drawer-toggle') ||
+            document.getElementById('rightNavDrawerIcon');
+        if (toggle) {
+            toggle.click();
         }
     }
 
@@ -187,58 +250,45 @@
         header.setAttribute('role', 'banner');
         header.setAttribute('aria-label', 'Character Header');
         header.innerHTML = `
-            <button type="button" id="cai-header-back" class="cai-header-btn" aria-label="Back or Characters" title="Back / Characters">
+            <button type="button" id="cai-header-back" class="cai-header-btn" aria-label="Characters" title="Characters">
                 <i class="fa-solid fa-chevron-left"></i>
             </button>
             <button type="button" id="cai-header-identity" class="cai-header-identity" aria-label="Current Character">
                 <img id="cai-header-avatar" class="cai-header-avatar" alt="" />
                 <span id="cai-header-name" class="cai-header-name">Characters</span>
             </button>
-            <button type="button" id="cai-header-menu" class="cai-header-btn" aria-label="Toggle SillyTavern Menu" title="Toggle Menu">
+            <button type="button" id="cai-header-menu" class="cai-header-btn" aria-label="Open SillyTavern Menu" title="Open Menu">
                 <i class="fa-solid fa-ellipsis"></i>
             </button>
         `;
 
         document.body.prepend(header);
 
+        const stopTouch = (e) => e.stopPropagation();
+        header.addEventListener('touchstart', stopTouch, { passive: true });
+        header.addEventListener('mousedown', stopTouch);
+
         const avatarEl = header.querySelector('#cai-header-avatar');
         avatarEl.addEventListener('error', () => {
             avatarEl.style.display = 'none';
         });
 
-        // Left button (<): close open drawer, or open Character List
         header.querySelector('#cai-header-back').addEventListener('click', (e) => {
             e.stopPropagation();
-            if (hasOpenDrawer()) {
-                closeAllDrawers();
-                setMenuOpen(false);
-                return;
-            }
-            if (menuOpen) {
-                setMenuOpen(false);
-                return;
-            }
-            document.getElementById('rightNavDrawerIcon')?.click();
+            openCharactersDrawer();
         });
 
-        // Center ([Avatar] Name): open/toggle Character panel
         header.querySelector('#cai-header-identity').addEventListener('click', (e) => {
             e.stopPropagation();
-            document.getElementById('rightNavDrawerIcon')?.click();
+            openCharactersDrawer();
         });
 
-        // Right button (⋯ / ×): toggle ST 9-icon drawer toolbar
         header.querySelector('#cai-header-menu').addEventListener('click', (e) => {
             e.stopPropagation();
-            if (hasOpenDrawer()) {
-                closeAllDrawers();
-                setMenuOpen(false);
-                return;
-            }
-            setMenuOpen(!menuOpen);
+            setLeftPopupOpen(false);
+            setMenuOpen(true);
         });
 
-        // Tapping chat area dismisses the expanded 9-icon toolbar cleanly
         const sheld = document.getElementById('sheld');
         if (sheld) {
             sheld.addEventListener('pointerdown', () => {
@@ -247,6 +297,68 @@
                 }
             }, { passive: true });
         }
+    }
+
+    function createMergedLeftButton() {
+        const leftForm = document.getElementById('leftSendForm');
+        if (!leftForm || document.getElementById('cai-left-merged-btn')) return;
+
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.id = 'cai-left-merged-btn';
+        btn.className = 'cai-left-merged-btn';
+        btn.setAttribute('aria-label', 'Chat & Extension Menu');
+        btn.title = 'Chat Options & Extensions';
+        btn.innerHTML = '<i class="fa-solid fa-plus"></i>';
+
+        const popover = document.createElement('div');
+        popover.id = 'cai-left-popover';
+        popover.className = 'cai-left-popover';
+        popover.innerHTML = `
+            <button type="button" class="cai-left-pop-item" data-action="options">
+                <i class="fa-solid fa-bars"></i>
+                <span>Chat Options</span>
+            </button>
+            <button type="button" class="cai-left-pop-item" data-action="extensions">
+                <i class="fa-solid fa-wand-magic-sparkles"></i>
+                <span>Extensions</span>
+            </button>
+        `;
+
+        leftForm.appendChild(btn);
+        leftForm.appendChild(popover);
+
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const extBtn = document.getElementById('extensionsMenuButton');
+            const extItem = popover.querySelector('[data-action="extensions"]');
+            if (extItem) {
+                const hasExt = Boolean(extBtn && extBtn.style.display !== 'none');
+                extItem.style.display = hasExt ? 'flex' : 'none';
+            }
+            setLeftPopupOpen(!leftPopupOpen);
+        });
+
+        popover.addEventListener('click', (e) => {
+            const item = e.target.closest('.cai-left-pop-item');
+            if (!item) return;
+            e.preventDefault();
+            e.stopPropagation();
+            const action = item.getAttribute('data-action');
+            setLeftPopupOpen(false);
+            if (action === 'options') {
+                document.getElementById('options_button')?.click();
+            } else if (action === 'extensions') {
+                document.getElementById('extensionsMenuButton')?.click();
+            }
+        });
+
+        document.addEventListener('pointerdown', (e) => {
+            if (!leftPopupOpen) return;
+            if (e.target.closest('#cai-left-merged-btn') || e.target.closest('#cai-left-popover')) return;
+            setLeftPopupOpen(false);
+        }, { passive: true });
     }
 
     function observeDrawers() {
@@ -286,6 +398,18 @@
                         <input id="cai_header_show_avatar" type="checkbox" ${settings.showAvatar ? 'checked' : ''} />
                         <span>Show Character Avatar</span>
                     </label>
+                    <label class="checkbox_label" for="cai_merge_left_buttons">
+                        <input id="cai_merge_left_buttons" type="checkbox" ${settings.mergeLeftButtons ? 'checked' : ''} />
+                        <span>Merge Left Input Icons into One (+)</span>
+                    </label>
+                    <div class="cai-setting-row">
+                        <label for="cai_placeholder_mode">Input Placeholder</label>
+                        <select id="cai_placeholder_mode" class="text_pole">
+                            <option value="en" ${settings.placeholderMode === 'en' ? 'selected' : ''}>Message {{char}}...</option>
+                            <option value="zh" ${settings.placeholderMode === 'zh' ? 'selected' : ''}>给 {{char}} 发消息</option>
+                            <option value="hide" ${settings.placeholderMode === 'hide' ? 'selected' : ''}>Hidden (Blank)</option>
+                        </select>
+                    </div>
                 </div>
             </div>
         `;
@@ -304,6 +428,43 @@
             saveSettings();
             updateHeader();
         });
+
+        block.querySelector('#cai_merge_left_buttons').addEventListener('change', (e) => {
+            const s = getSettings();
+            s.mergeLeftButtons = e.target.checked;
+            saveSettings();
+            applyEnabledState();
+        });
+
+        block.querySelector('#cai_placeholder_mode').addEventListener('change', (e) => {
+            const s = getSettings();
+            s.placeholderMode = e.target.value;
+            saveSettings();
+            applyEnabledState();
+        });
+    }
+
+    function registerQuickToggleCommand() {
+        const ctx = getCtx();
+        const Parser = ctx?.SlashCommandParser;
+        const Cmd = ctx?.SlashCommand;
+        if (!Parser?.addCommandObject || !Cmd?.fromProps) return;
+
+        try {
+            Parser.addCommandObject(Cmd.fromProps({
+                name: 'cai-header',
+                callback: () => {
+                    const s = getSettings();
+                    s.enabled = !s.enabled;
+                    saveSettings();
+                    applyEnabledState();
+                    return s.enabled ? 'enabled' : 'disabled';
+                },
+                helpString: 'Toggle Cai Header Bar on/off.',
+            }));
+        } catch {
+            // Ignore if already registered
+        }
     }
 
     function bindEvents() {
@@ -333,12 +494,14 @@
         initialized = true;
 
         createHeaderDom();
+        createMergedLeftButton();
         createSettingsPanel();
         observeDrawers();
+        observePlaceholder();
         bindEvents();
+        registerQuickToggleCommand();
         applyEnabledState();
 
-        // Catch initial chat hydration right after app boot
         setTimeout(updateHeader, 450);
         setTimeout(updateHeader, 1500);
     }
