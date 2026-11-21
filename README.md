@@ -1,15 +1,17 @@
-# Cai Header Bar (SillyTavern / TauriTavern Extension)
+# Cai Header Bar (SillyTavern / TauriTavern Extension) v1.4.0
 
-为 SillyTavern / TauriTavern（iOS）提供 1:1 仿 Character.AI 风格的顶栏与底部输入体验：
+为 SillyTavern / TauriTavern（iOS）提供仿 Character.AI 的顶栏与底部输入体验，配合 `Cai-Inspired Mod (iOS Polished)` 主题使用效果最好。
 
-- **仿 c.ai 顶栏（原位切换、零遮挡）**：
-  - 左侧 `<` / 中间 `[头像] 角色名`：实时显示当前角色或群聊，点击打开角色面板。
-  - 右侧 `⋯`：原位隐藏标题栏并露出 ST 原生 9 图标顶栏与抽屉，关闭抽屉或点回聊天区自动切回 c.ai 标题栏。
-  - 内置快捷命令 `/cai-header` 可随时开关。
-- **底部左侧图标二合一（`+`）**：将 `☰ 聊天选项` 与 `🪄 扩展菜单` 合并为发送栏外侧的单个 `+` 图标，点击弹出紧凑二选一小菜单，且不影响原生菜单定位。
-- **动态 c.ai 输入框占位文案**：支持在扩展设置中切换英文原版 `Message {{char}}...`、中文原版 `给 {{char}} 发消息` 或完全隐藏，切卡自动同步角色名。
+- **c.ai 顶栏**：`<` 打开角色列表；中间 `[头像] 角色名` 打开当前角色卡（群聊同理）；`⋯` 露出 ST 原生图标栏。
+  - 打开任何抽屉时顶栏自动让位，抽屉关闭后自动切回（切换抽屉时不会闪）。
+  - 原位挂在 `#top-settings-holder` 内，从不修改 `top` / 安全区，TauriTavern iOS 下不会钻进状态栏。
+  - 高度可在 `style.css` 顶部的 `--cai-header-h` / `--cai-header-avatar` 调。
+- **底部 `+`**：把 ☰ 聊天选项 与 🪄 扩展菜单 合成一个按钮，弹出二选一小菜单。
+- **占位文案**：`Message {{char}}...` / `给 {{char}} 发消息` / 隐藏。断开 API 时保留 ST 原本的 “Not connected” 提示；关闭扩展会还原原文案。
+- **本地字体（无外链）**：c.ai 同款 Open Sans / Lion 原版 Fira Sans / 跟随主题，扩展设置里切换。字体文件在 `fonts/`，SIL OFL 授权。
+- 快捷命令 `/cai-header` 开关整个扩展（万一顶栏出问题也能救回来）。
 
-## 安装 / 更新方式（通过 GitHub）
-1. 将本目录（`manifest.json`、`index.js`、`style.css`、`README.md`）推送到你的公开 GitHub 仓库。
-2. 在 TauriTavern 中打开 **扩展（Extensions）→ 安装扩展 / 更新扩展**。
-3. 可在 **扩展 → Cai Header Bar** 中自由开关各项功能与切换占位文案语言。
+## 安装 / 更新（GitHub）
+1. 把本目录全部内容（含 `fonts/`）推到你的公开 GitHub 仓库。
+2. TauriTavern → 扩展 → 安装扩展 / 更新。
+3. 扩展 → Cai Header Bar 里调开关、占位文案、字体。

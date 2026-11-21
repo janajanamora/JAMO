@@ -1,39 +1,64 @@
 /* ==========================================================================
-   Cai Header Bar v1.3.0 — In-Place Overlay Stylesheet
-   - #cai-top-header lives INSIDE #top-settings-holder (position: absolute; inset: 0)
-   - NEVER overrides #top-settings-holder's `top` property (100% safe on all iOS
-     TauriTavern builds — never jumps into the iOS status bar!)
-   - #cai-left-popover lives on document.body (position: fixed) so ST's
-     #leftSendForm > div flex rules never force it inline!
+   Cai Header Bar v1.4.0 — stylesheet
+   - #cai-top-header lives INSIDE #top-settings-holder (absolute, inset: 0).
+     We only change the bar HEIGHT via --topBarBlockSize (ST derives #sheld /
+     drawer offsets from it). We never touch `top` or safe-area insets.
+   - Tweak the bar here:  --cai-header-h / --cai-header-avatar
    ========================================================================== */
 
-#cai-top-header {
-    display: none !important;
+/* ---------------- Bundled fonts (local files, no external links) ---------------- */
+@font-face { font-family: 'Open Sans'; font-style: normal; font-weight: 400; font-display: swap; src: url('fonts/open-sans-latin-400-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Open Sans'; font-style: italic; font-weight: 400; font-display: swap; src: url('fonts/open-sans-latin-400-italic.woff2') format('woff2'); }
+@font-face { font-family: 'Open Sans'; font-style: normal; font-weight: 600; font-display: swap; src: url('fonts/open-sans-latin-600-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Open Sans'; font-style: italic; font-weight: 600; font-display: swap; src: url('fonts/open-sans-latin-600-italic.woff2') format('woff2'); }
+@font-face { font-family: 'Fira Sans'; font-style: normal; font-weight: 400; font-display: swap; src: url('fonts/fira-sans-latin-400-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Fira Sans'; font-style: italic; font-weight: 400; font-display: swap; src: url('fonts/fira-sans-latin-400-italic.woff2') format('woff2'); }
+@font-face { font-family: 'Fira Sans'; font-style: normal; font-weight: 600; font-display: swap; src: url('fonts/fira-sans-latin-600-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Fira Sans'; font-style: italic; font-weight: 600; font-display: swap; src: url('fonts/fira-sans-latin-600-italic.woff2') format('woff2'); }
+
+/* The Cai theme reads var(--cai-font); other themes get a direct font-family. */
+body.cai-font-open-sans {
+    --cai-font: 'Open Sans', -apple-system, 'PingFang SC', 'Noto Sans SC', system-ui, sans-serif;
+}
+body.cai-font-fira-sans {
+    --cai-font: 'Fira Sans', -apple-system, 'PingFang SC', 'Noto Sans SC', system-ui, sans-serif;
+}
+body.cai-font-open-sans .mes_text,
+body.cai-font-open-sans #send_textarea,
+body.cai-font-open-sans #cai-top-header,
+body.cai-font-fira-sans .mes_text,
+body.cai-font-fira-sans #send_textarea,
+body.cai-font-fira-sans #cai-top-header {
+    font-family: var(--cai-font) !important;
 }
 
-#cai-left-merged-btn {
-    display: none !important;
-}
-
+/* ---------------- Hidden by default (extension disabled) ---------------- */
+#cai-top-header,
+#cai-left-merged-btn,
 #cai-left-popover {
     display: none !important;
 }
 
-/* Uniform 48px bar height */
+/* ---------------- Bar height ---------------- */
 html:has(body.cai-header-active) {
-    --topBarBlockSize: 48px;
+    --cai-header-h: 56px;
+    --topBarBlockSize: var(--cai-header-h);
 }
 
 html body.cai-header-active {
-    --topBarBlockSize: 48px !important;
+    --cai-header-h: 56px;
+    --cai-header-avatar: 38px;
+    --topBarBlockSize: var(--cai-header-h) !important;
 }
 
-/* Keep #top-bar and #top-settings-holder at their NATIVE `top` — NEVER touch `top`! */
 html body.cai-header-active #top-bar,
 html body.cai-header-active #top-settings-holder {
-    height: 48px !important;
+    height: var(--cai-header-h) !important;
     background: var(--cai-bar, #212429) !important;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+    border-bottom: none !important;
+    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.35) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
     pointer-events: auto !important;
     cursor: default !important;
 }
@@ -48,7 +73,7 @@ html body.cai-header-active #top-settings-holder .drawer-toggle {
     pointer-events: auto !important;
 }
 
-/* ---------------- MAIN C.AI HEADER BAR (EXACT OVERLAY INSIDE #top-settings-holder) ---------------- */
+/* ---------------- c.ai title bar ---------------- */
 html body.cai-header-active:not(.cai-header-menu-open):not(.cai-header-drawer-open) #cai-top-header {
     position: absolute !important;
     inset: 0 !important;
@@ -56,20 +81,15 @@ html body.cai-header-active:not(.cai-header-menu-open):not(.cai-header-drawer-op
     height: 100% !important;
     z-index: 50 !important;
     display: grid !important;
-    grid-template-columns: 44px minmax(0, 1fr) 44px;
+    grid-template-columns: 48px minmax(0, 1fr) 48px;
     align-items: center;
-    padding: 0 6px;
+    padding: 0 4px;
     box-sizing: border-box;
     background: var(--cai-bar, #212429);
     color: var(--cai-ink, #eef1f6);
     user-select: none;
     -webkit-user-select: none;
-}
-
-/* When menu or ANY drawer is open, completely hide #cai-top-header */
-html body.cai-header-active.cai-header-menu-open #cai-top-header,
-html body.cai-header-active.cai-header-drawer-open #cai-top-header {
-    display: none !important;
+    -webkit-touch-callout: none;
 }
 
 #cai-top-header .cai-header-btn {
@@ -78,18 +98,19 @@ html body.cai-header-active.cai-header-drawer-open #cai-top-header {
     background: transparent !important;
     border: none !important;
     box-shadow: none !important;
-    width: 38px;
-    height: 38px;
+    width: 42px;
+    height: 42px;
     margin: 0 auto;
     padding: 0;
-    border-radius: 10px;
+    border-radius: 12px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     color: var(--cai-ink, #eef1f6);
-    font-size: 18px;
+    font-size: 20px;
     cursor: pointer;
-    opacity: 0.88;
+    opacity: 0.92;
+    -webkit-tap-highlight-color: transparent;
     transition: background-color 0.14s ease, opacity 0.14s ease, transform 0.1s ease;
 }
 
@@ -106,16 +127,17 @@ html body.cai-header-active.cai-header-drawer-open #cai-top-header {
     border: none !important;
     box-shadow: none !important;
     margin: 0 auto;
-    padding: 4px 10px;
+    padding: 4px 8px;
     max-width: 100%;
     min-width: 0;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 9px;
-    border-radius: 10px;
+    gap: 12px;
+    border-radius: 12px;
     cursor: pointer;
     color: inherit;
+    -webkit-tap-highlight-color: transparent;
 }
 
 #cai-top-header .cai-header-identity:active {
@@ -123,29 +145,28 @@ html body.cai-header-active.cai-header-drawer-open #cai-top-header {
 }
 
 #cai-top-header .cai-header-avatar {
-    width: 30px;
-    height: 30px;
-    border-radius: 6px;
+    width: var(--cai-header-avatar, 38px);
+    height: var(--cai-header-avatar, 38px);
+    border-radius: 9px;
     object-fit: cover;
     object-position: center top;
     flex-shrink: 0;
     display: none;
     border: none;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
 }
 
 #cai-top-header .cai-header-name {
-    font-size: 16px;
+    font-size: 17px;
     font-weight: 600;
     line-height: 1.25;
-    letter-spacing: 0.01em;
+    letter-spacing: 0;
     color: var(--cai-ink, #f2f4f8);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
-/* ---------------- MERGED SINGLE LEFT INPUT BUTTON (OUTSIDE PILL) ---------------- */
+/* ---------------- Merged "+" button (outside the input pill) ---------------- */
 html body.cai-header-active.cai-merge-left-buttons #leftSendForm {
     position: relative !important;
     width: 36px !important;
@@ -153,14 +174,14 @@ html body.cai-header-active.cai-merge-left-buttons #leftSendForm {
     overflow: visible !important;
 }
 
-/* Keep native buttons anchored at same spot for Popper.js, visually replaced by #cai-left-merged-btn */
+/* Native buttons stay in place (Popper anchors to them) but are invisible and untouchable. */
 html body.cai-header-active.cai-merge-left-buttons #leftSendForm > #options_button,
 html body.cai-header-active.cai-merge-left-buttons #leftSendForm > #extensionsMenuButton {
     position: absolute !important;
     left: 0 !important;
     bottom: 0 !important;
     width: 36px !important;
-    height: 42px !important;
+    height: 100% !important;
     opacity: 0 !important;
     pointer-events: none !important;
     margin: 0 !important;
@@ -174,22 +195,23 @@ html body.cai-header-active.cai-merge-left-buttons #cai-left-merged-btn {
     align-items: center;
     justify-content: center;
     width: 36px;
-    height: 42px;
+    height: 100%;
+    min-height: 42px;
     margin: 0;
     padding: 0;
     border: none !important;
     background: transparent !important;
     box-shadow: none !important;
     color: var(--cai-ink, #eef1f6);
-    font-size: 19px;
+    font-size: 21px;
     cursor: pointer;
     border-radius: 999px;
-    opacity: 0.9;
-    transition: transform 0.14s ease, opacity 0.14s ease, color 0.14s ease;
+    opacity: 0.92;
+    -webkit-tap-highlight-color: transparent;
+    transition: transform 0.16s ease, opacity 0.14s ease, color 0.14s ease;
 }
 
 html body.cai-header-active.cai-merge-left-buttons #cai-left-merged-btn:active {
-    transform: scale(0.9);
     opacity: 1;
 }
 
@@ -199,18 +221,18 @@ html body.cai-header-active.cai-merge-left-buttons #cai-left-merged-btn.is-open 
     opacity: 1;
 }
 
-/* Popover lives on document.body as position: fixed — NEVER forced inline! */
-#cai-left-popover.is-open {
+/* Popover: on document.body, fixed */
+html body.cai-header-active #cai-left-popover.is-open {
     position: fixed !important;
     z-index: 4000 !important;
     display: flex !important;
     flex-direction: column;
-    gap: 4px;
-    min-width: 152px;
+    gap: 2px;
+    min-width: 168px;
     padding: 6px;
     border-radius: 14px;
-    background: var(--cai-bar, #212429);
-    border: 1px solid rgba(255, 255, 255, 0.11);
+    background: var(--cai-surface-2, #262b33);
+    border: 1px solid rgba(255, 255, 255, 0.08);
     box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55);
 }
 
@@ -219,38 +241,38 @@ html body.cai-header-active.cai-merge-left-buttons #cai-left-merged-btn.is-open 
     -webkit-appearance: none;
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 12px;
     width: 100%;
-    padding: 9px 11px;
+    padding: 11px 12px;
     border: none !important;
-    border-radius: 9px;
+    border-radius: 10px;
     background: transparent !important;
     color: var(--cai-ink, #eef1f6);
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 500;
     text-align: left;
     cursor: pointer;
     white-space: nowrap;
+    -webkit-tap-highlight-color: transparent;
 }
 
-#cai-left-popover .cai-left-pop-item:active,
-#cai-left-popover .cai-left-pop-item:hover {
+#cai-left-popover .cai-left-pop-item:active {
     background: rgba(255, 255, 255, 0.08) !important;
 }
 
 #cai-left-popover .cai-left-pop-item i {
-    width: 16px;
+    width: 18px;
     text-align: center;
     opacity: 0.85;
 }
 
-/* Optional hidden placeholder mode */
+/* ---------------- Hidden placeholder mode ---------------- */
 html body.cai-header-active.cai-hide-placeholder #send_textarea::placeholder {
     opacity: 0 !important;
     color: transparent !important;
 }
 
-/* Extension settings */
+/* ---------------- Settings panel ---------------- */
 .cai-header-settings .checkbox_label {
     margin: 6px 0;
 }
