@@ -1,4 +1,4 @@
-# Cai Header Bar (SillyTavern / TauriTavern Extension) v1.4.0
+# Cai Header Bar (SillyTavern / TauriTavern Extension) v1.4.1
 
 为 SillyTavern / TauriTavern（iOS）提供仿 Character.AI 的顶栏与底部输入体验，配合 `Cai-Inspired Mod (iOS Polished)` 主题使用效果最好。
 

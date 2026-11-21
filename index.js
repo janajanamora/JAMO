@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Cai Header Bar v1.4.0 — SillyTavern / TauriTavern Extension
+   Cai Header Bar v1.4.1 — SillyTavern / TauriTavern Extension
    - #cai-top-header is mounted inside #top-settings-holder (absolute, inset 0),
      so it inherits TauriTavern's native top coordinate. We never touch `top`,
      never add safe-area insets (the iOS host already removed them).
