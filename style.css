@@ -1,20 +1,25 @@
 /* ==========================================================================
-   Cai Header Bar v1.2.0 — Swap-in-Place Stylesheet + Merged Left Input Button
-   - NEVER moves #top-settings-holder from top: 0
-   - NEVER shifts .drawer-content from ST's native top: var(--topBarBlockSize)
-   - NEVER disables interaction on #top-settings-holder
+   Cai Header Bar v1.3.0 — In-Place Overlay Stylesheet
+   - #cai-top-header lives INSIDE #top-settings-holder (position: absolute; inset: 0)
+   - NEVER overrides #top-settings-holder's `top` property (100% safe on all iOS
+     TauriTavern builds — never jumps into the iOS status bar!)
+   - #cai-left-popover lives on document.body (position: fixed) so ST's
+     #leftSendForm > div flex rules never force it inline!
    ========================================================================== */
 
 #cai-top-header {
-    display: none;
+    display: none !important;
 }
 
-.cai-left-merged-btn,
-.cai-left-popover {
-    display: none;
+#cai-left-merged-btn {
+    display: none !important;
 }
 
-/* Uniform 48px bar height shared by BOTH #cai-top-header and #top-settings-holder */
+#cai-left-popover {
+    display: none !important;
+}
+
+/* Uniform 48px bar height */
 html:has(body.cai-header-active) {
     --topBarBlockSize: 48px;
 }
@@ -23,37 +28,9 @@ html body.cai-header-active {
     --topBarBlockSize: 48px !important;
 }
 
-/* ---------------- MAIN C.AI HEADER BAR (ONLY SHOWN WHEN CHATTING) ---------------- */
-html body.cai-header-active:not(.cai-header-menu-open):not(.cai-header-drawer-open) #cai-top-header {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    width: 100%;
-    height: 48px;
-    z-index: 3010;
-    display: grid;
-    grid-template-columns: 44px minmax(0, 1fr) 44px;
-    align-items: center;
-    padding: 0 6px;
-    box-sizing: border-box;
-    background: var(--cai-bar, #212429);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-    color: var(--cai-ink, #eef1f6);
-    user-select: none;
-    -webkit-user-select: none;
-}
-
-/* When menu or ANY drawer is open, completely hide #cai-top-header so native ST top bar is 100% unobstructed */
-html body.cai-header-active.cai-header-menu-open #cai-top-header,
-html body.cai-header-active.cai-header-drawer-open #cai-top-header {
-    display: none !important;
-}
-
-/* Ensure ST's native #top-settings-holder stays 100% normal & clickable when revealed */
+/* Keep #top-bar and #top-settings-holder at their NATIVE `top` — NEVER touch `top`! */
 html body.cai-header-active #top-bar,
 html body.cai-header-active #top-settings-holder {
-    top: 0 !important;
     height: 48px !important;
     background: var(--cai-bar, #212429) !important;
     border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
@@ -71,7 +48,30 @@ html body.cai-header-active #top-settings-holder .drawer-toggle {
     pointer-events: auto !important;
 }
 
-/* ---------------- HEADER BUTTONS & IDENTITY ---------------- */
+/* ---------------- MAIN C.AI HEADER BAR (EXACT OVERLAY INSIDE #top-settings-holder) ---------------- */
+html body.cai-header-active:not(.cai-header-menu-open):not(.cai-header-drawer-open) #cai-top-header {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    z-index: 50 !important;
+    display: grid !important;
+    grid-template-columns: 44px minmax(0, 1fr) 44px;
+    align-items: center;
+    padding: 0 6px;
+    box-sizing: border-box;
+    background: var(--cai-bar, #212429);
+    color: var(--cai-ink, #eef1f6);
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+/* When menu or ANY drawer is open, completely hide #cai-top-header */
+html body.cai-header-active.cai-header-menu-open #cai-top-header,
+html body.cai-header-active.cai-header-drawer-open #cai-top-header {
+    display: none !important;
+}
+
 #cai-top-header .cai-header-btn {
     appearance: none;
     -webkit-appearance: none;
@@ -148,10 +148,12 @@ html body.cai-header-active #top-settings-holder .drawer-toggle {
 /* ---------------- MERGED SINGLE LEFT INPUT BUTTON (OUTSIDE PILL) ---------------- */
 html body.cai-header-active.cai-merge-left-buttons #leftSendForm {
     position: relative !important;
+    width: 36px !important;
+    min-width: 36px !important;
     overflow: visible !important;
 }
 
-/* Keep native buttons anchored at same coordinates for Popper.js, visually replaced by #cai-left-merged-btn */
+/* Keep native buttons anchored at same spot for Popper.js, visually replaced by #cai-left-merged-btn */
 html body.cai-header-active.cai-merge-left-buttons #leftSendForm > #options_button,
 html body.cai-header-active.cai-merge-left-buttons #leftSendForm > #extensionsMenuButton {
     position: absolute !important;
@@ -182,7 +184,7 @@ html body.cai-header-active.cai-merge-left-buttons #cai-left-merged-btn {
     font-size: 19px;
     cursor: pointer;
     border-radius: 999px;
-    opacity: 0.88;
+    opacity: 0.9;
     transition: transform 0.14s ease, opacity 0.14s ease, color 0.14s ease;
 }
 
@@ -197,20 +199,19 @@ html body.cai-header-active.cai-merge-left-buttons #cai-left-merged-btn.is-open 
     opacity: 1;
 }
 
-html body.cai-header-active.cai-merge-left-buttons #cai-left-popover.is-open {
+/* Popover lives on document.body as position: fixed — NEVER forced inline! */
+#cai-left-popover.is-open {
+    position: fixed !important;
+    z-index: 4000 !important;
     display: flex !important;
     flex-direction: column;
     gap: 4px;
-    position: absolute;
-    left: 0;
-    bottom: calc(100% + 10px);
-    z-index: 3000;
-    min-width: 150px;
+    min-width: 152px;
     padding: 6px;
     border-radius: 14px;
     background: var(--cai-bar, #212429);
-    border: 1px solid rgba(255, 255, 255, 0.10);
-    box-shadow: 0 10px 26px rgba(0, 0, 0, 0.52);
+    border: 1px solid rgba(255, 255, 255, 0.11);
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55);
 }
 
 #cai-left-popover .cai-left-pop-item {
@@ -240,7 +241,7 @@ html body.cai-header-active.cai-merge-left-buttons #cai-left-popover.is-open {
 #cai-left-popover .cai-left-pop-item i {
     width: 16px;
     text-align: center;
-    opacity: 0.82;
+    opacity: 0.85;
 }
 
 /* Optional hidden placeholder mode */

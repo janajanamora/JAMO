@@ -1,8 +1,11 @@
 /* ==========================================================================
-   Cai Header Bar v1.2.0 — SillyTavern / TauriTavern Extension
-   1. Swap-in-Place c.ai Header Bar ([ < ] [Avatar] Name [ ⋯ ])
-   2. Dynamic c.ai Input Placeholder ("Message {{char}}..." / "给 {{char}} 发消息" / Hidden)
-   3. Single Merged Left Input Button (combines Chat Options + Extensions outside pill)
+   Cai Header Bar v1.3.0 — SillyTavern / TauriTavern Extension
+   - Mounts #cai-top-header directly inside #top-settings-holder (inset: 0)
+     so it inherits TauriTavern's EXACT iOS safe-area top coordinate (zero
+     status-bar overlap, zero double bars!)
+   - Mounts #cai-left-popover on document.body (fixed) so #leftSendForm > div
+     rules never force it inline
+   - Dynamic c.ai placeholder ("Message {{char}}..." / "给 {{char}} 发消息" / Hidden)
    ========================================================================== */
 
 (() => {
@@ -107,13 +110,27 @@
         document.body.classList.toggle('cai-header-menu-open', menuOpen);
     }
 
+    function positionLeftPopover() {
+        const pop = document.getElementById('cai-left-popover');
+        const btn = document.getElementById('cai-left-merged-btn');
+        if (!pop || !btn) return;
+        const rect = btn.getBoundingClientRect();
+        const bottomGap = Math.max(10, window.innerHeight - rect.top + 8);
+        const leftPos = Math.max(10, rect.left);
+        pop.style.left = `${leftPos}px`;
+        pop.style.bottom = `${bottomGap}px`;
+    }
+
     function setLeftPopupOpen(open) {
         leftPopupOpen = Boolean(open);
         const pop = document.getElementById('cai-left-popover');
+        const btn = document.getElementById('cai-left-merged-btn');
         if (pop) {
+            if (leftPopupOpen) {
+                positionLeftPopover();
+            }
             pop.classList.toggle('is-open', leftPopupOpen);
         }
-        const btn = document.getElementById('cai-left-merged-btn');
         if (btn) {
             btn.classList.toggle('is-open', leftPopupOpen);
         }
@@ -143,15 +160,6 @@
 
         const settings = getSettings();
         if (!settings.enabled) return;
-
-        // Preserve explicit "Not connected" warning if ST set it and no API is connected
-        const noConnText = textarea.getAttribute('no_connection_text') || 'Not connected to API!';
-        if (textarea.placeholder === noConnText && !document.querySelector('.online_status_indicator.success')) {
-            // Still replace if user explicitly chose 'hide', otherwise keep brief connection notice
-            if (settings.placeholderMode !== 'hide') {
-                // Only keep if truly disconnected; fall through if connected
-            }
-        }
 
         const { name } = resolveIdentity();
         const desired = computePlaceholder(name, settings.placeholderMode);
@@ -243,7 +251,8 @@
     }
 
     function createHeaderDom() {
-        if (document.getElementById('cai-top-header')) return;
+        const holder = document.getElementById('top-settings-holder');
+        if (!holder || document.getElementById('cai-top-header')) return;
 
         const header = document.createElement('header');
         header.id = 'cai-top-header';
@@ -262,7 +271,8 @@
             </button>
         `;
 
-        document.body.prepend(header);
+        // Mount INSIDE #top-settings-holder so it inherits TauriTavern's exact native iOS top offset!
+        holder.appendChild(header);
 
         const stopTouch = (e) => e.stopPropagation();
         header.addEventListener('touchstart', stopTouch, { passive: true });
@@ -301,64 +311,69 @@
 
     function createMergedLeftButton() {
         const leftForm = document.getElementById('leftSendForm');
-        if (!leftForm || document.getElementById('cai-left-merged-btn')) return;
+        if (!leftForm) return;
 
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.id = 'cai-left-merged-btn';
-        btn.className = 'cai-left-merged-btn';
-        btn.setAttribute('aria-label', 'Chat & Extension Menu');
-        btn.title = 'Chat Options & Extensions';
-        btn.innerHTML = '<i class="fa-solid fa-plus"></i>';
+        if (!document.getElementById('cai-left-merged-btn')) {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.id = 'cai-left-merged-btn';
+            btn.className = 'cai-left-merged-btn';
+            btn.setAttribute('aria-label', 'Chat & Extension Menu');
+            btn.title = 'Chat Options & Extensions';
+            btn.innerHTML = '<i class="fa-solid fa-plus"></i>';
+            leftForm.appendChild(btn);
 
-        const popover = document.createElement('div');
-        popover.id = 'cai-left-popover';
-        popover.className = 'cai-left-popover';
-        popover.innerHTML = `
-            <button type="button" class="cai-left-pop-item" data-action="options">
-                <i class="fa-solid fa-bars"></i>
-                <span>Chat Options</span>
-            </button>
-            <button type="button" class="cai-left-pop-item" data-action="extensions">
-                <i class="fa-solid fa-wand-magic-sparkles"></i>
-                <span>Extensions</span>
-            </button>
-        `;
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const extBtn = document.getElementById('extensionsMenuButton');
+                const popover = document.getElementById('cai-left-popover');
+                const extItem = popover?.querySelector('[data-action="extensions"]');
+                if (extItem) {
+                    const hasExt = Boolean(extBtn && extBtn.style.display !== 'none');
+                    extItem.style.display = hasExt ? 'flex' : 'none';
+                }
+                setLeftPopupOpen(!leftPopupOpen);
+            });
+        }
 
-        leftForm.appendChild(btn);
-        leftForm.appendChild(popover);
+        // Mount popover on document.body (NOT inside #leftSendForm) so ST's #leftSendForm > div rules never touch it!
+        if (!document.getElementById('cai-left-popover')) {
+            const popover = document.createElement('div');
+            popover.id = 'cai-left-popover';
+            popover.className = 'cai-left-popover';
+            popover.innerHTML = `
+                <button type="button" class="cai-left-pop-item" data-action="options">
+                    <i class="fa-solid fa-bars"></i>
+                    <span>Chat Options</span>
+                </button>
+                <button type="button" class="cai-left-pop-item" data-action="extensions">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i>
+                    <span>Extensions</span>
+                </button>
+            `;
+            document.body.appendChild(popover);
 
-        btn.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            const extBtn = document.getElementById('extensionsMenuButton');
-            const extItem = popover.querySelector('[data-action="extensions"]');
-            if (extItem) {
-                const hasExt = Boolean(extBtn && extBtn.style.display !== 'none');
-                extItem.style.display = hasExt ? 'flex' : 'none';
-            }
-            setLeftPopupOpen(!leftPopupOpen);
-        });
+            popover.addEventListener('click', (e) => {
+                const item = e.target.closest('.cai-left-pop-item');
+                if (!item) return;
+                e.preventDefault();
+                e.stopPropagation();
+                const action = item.getAttribute('data-action');
+                setLeftPopupOpen(false);
+                if (action === 'options') {
+                    document.getElementById('options_button')?.click();
+                } else if (action === 'extensions') {
+                    document.getElementById('extensionsMenuButton')?.click();
+                }
+            });
 
-        popover.addEventListener('click', (e) => {
-            const item = e.target.closest('.cai-left-pop-item');
-            if (!item) return;
-            e.preventDefault();
-            e.stopPropagation();
-            const action = item.getAttribute('data-action');
-            setLeftPopupOpen(false);
-            if (action === 'options') {
-                document.getElementById('options_button')?.click();
-            } else if (action === 'extensions') {
-                document.getElementById('extensionsMenuButton')?.click();
-            }
-        });
-
-        document.addEventListener('pointerdown', (e) => {
-            if (!leftPopupOpen) return;
-            if (e.target.closest('#cai-left-merged-btn') || e.target.closest('#cai-left-popover')) return;
-            setLeftPopupOpen(false);
-        }, { passive: true });
+            document.addEventListener('pointerdown', (e) => {
+                if (!leftPopupOpen) return;
+                if (e.target.closest('#cai-left-merged-btn') || e.target.closest('#cai-left-popover')) return;
+                setLeftPopupOpen(false);
+            }, { passive: true });
+        }
     }
 
     function observeDrawers() {
