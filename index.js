@@ -1,11 +1,11 @@
 /* ==========================================================================
-   Cai Header Bar v1.4.1 — SillyTavern / TauriTavern Extension
+   Cai Header Bar v1.5.0 — SillyTavern / TauriTavern Extension
    - #cai-top-header is mounted inside #top-settings-holder (absolute, inset 0),
      so it inherits TauriTavern's native top coordinate. We never touch `top`,
      never add safe-area insets (the iOS host already removed them).
    - The header hides itself whenever the native menu/drawers are in use, so
      drawers are never trapped under it.
-   - #cai-left-popover lives on document.body (position: fixed).
+   - "+" opens a tray showing ST's real Chat Options / Extensions triggers.
    - Bundled local fonts (no external font links): Open Sans (c.ai) / Fira Sans
      (Lion original).
    ========================================================================== */
@@ -108,27 +108,16 @@
         document.body.classList.toggle('cai-header-menu-open', menuOpen);
     }
 
-    /* ---------------- "+" popover ---------------- */
-
-    function positionLeftPopover() {
-        const pop = document.getElementById('cai-left-popover');
-        const btn = document.getElementById('cai-left-merged-btn');
-        if (!pop || !btn) return;
-        const rect = btn.getBoundingClientRect();
-        pop.style.left = `${Math.max(10, rect.left)}px`;
-        pop.style.bottom = `${Math.max(10, window.innerHeight - rect.top + 8)}px`;
-    }
+    /* ---------------- "+" tray ----------------
+       The "+" no longer proxies clicks. It opens a small tray that shows ST's REAL
+       #options_button / #extensionsMenuButton, so the user taps the native triggers
+       directly (exactly like with merging turned off). Proxying a programmatic
+       .click() made the Chat Options menu flash and close on iOS. */
 
     function setLeftPopupOpen(open) {
         leftPopupOpen = Boolean(open);
-        const pop = document.getElementById('cai-left-popover');
+        document.body.classList.toggle('cai-left-tray-open', leftPopupOpen);
         const btn = document.getElementById('cai-left-merged-btn');
-        if (pop) {
-            if (leftPopupOpen) {
-                positionLeftPopover();
-            }
-            pop.classList.toggle('is-open', leftPopupOpen);
-        }
         if (btn) {
             btn.classList.toggle('is-open', leftPopupOpen);
             btn.setAttribute('aria-expanded', String(leftPopupOpen));
@@ -375,95 +364,49 @@
         }
     }
 
-    function closeNativeLeftMenus() {
-        // ST's own popup menus close on any document click outside them; make sure they are not left open
-        // underneath our popover.
-        for (const [menuId, triggerId] of [['options', 'options_button'], ['extensionsMenu', 'extensionsMenuButton']]) {
-            const menu = document.getElementById(menuId);
-            const trigger = document.getElementById(triggerId);
-            if (menu && trigger && menu.style.display !== 'none' && getComputedStyle(menu).display !== 'none') {
-                trigger.click();
-            }
-        }
+    function isNativeMenuOpen() {
+        return ['options', 'extensionsMenu'].some((id) => {
+            const el = document.getElementById(id);
+            return Boolean(el && el.style.display !== 'none' && getComputedStyle(el).display !== 'none');
+        });
     }
 
     function createMergedLeftButton() {
         const leftForm = document.getElementById('leftSendForm');
-        if (!leftForm) return;
+        if (!leftForm || document.getElementById('cai-left-merged-btn')) return;
 
-        if (!document.getElementById('cai-left-merged-btn')) {
-            const btn = document.createElement('button');
-            btn.type = 'button';
-            btn.id = 'cai-left-merged-btn';
-            btn.className = 'cai-left-merged-btn';
-            btn.setAttribute('aria-label', 'Chat & Extension Menu');
-            btn.setAttribute('aria-haspopup', 'menu');
-            btn.setAttribute('aria-expanded', 'false');
-            btn.title = 'Chat Options & Extensions';
-            btn.innerHTML = '<i class="fa-solid fa-plus"></i>';
-            leftForm.appendChild(btn);
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.id = 'cai-left-merged-btn';
+        btn.className = 'cai-left-merged-btn';
+        btn.setAttribute('aria-label', 'Chat & Extension Menu');
+        btn.setAttribute('aria-haspopup', 'menu');
+        btn.setAttribute('aria-expanded', 'false');
+        btn.title = 'Chat Options & Extensions';
+        btn.innerHTML = '<i class="fa-solid fa-plus"></i>';
+        leftForm.appendChild(btn);
 
-            btn.addEventListener('click', (e) => {
-                e.preventDefault();
-                const willOpen = !leftPopupOpen;
-                if (willOpen) {
-                    closeNativeLeftMenus();
-                    const extBtn = document.getElementById('extensionsMenuButton');
-                    const extItem = document.querySelector('#cai-left-popover [data-action="extensions"]');
-                    if (extItem) {
-                        const hasExt = Boolean(extBtn && extBtn.style.display !== 'none');
-                        extItem.style.display = hasExt ? 'flex' : 'none';
-                    }
-                }
-                setLeftPopupOpen(willOpen);
-            });
-        }
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            // Let this click bubble: ST's own "click outside closes the menu" handlers then close
+            // any native menu that is still open, so "+" never stacks on top of one.
+            setLeftPopupOpen(!leftPopupOpen && !isNativeMenuOpen());
+        });
 
-        if (!document.getElementById('cai-left-popover')) {
-            const popover = document.createElement('div');
-            popover.id = 'cai-left-popover';
-            popover.className = 'cai-left-popover';
-            popover.setAttribute('role', 'menu');
-            popover.innerHTML = `
-                <button type="button" class="cai-left-pop-item" role="menuitem" data-action="options">
-                    <i class="fa-solid fa-bars"></i>
-                    <span>Chat Options</span>
-                </button>
-                <button type="button" class="cai-left-pop-item" role="menuitem" data-action="extensions">
-                    <i class="fa-solid fa-wand-magic-sparkles"></i>
-                    <span>Extensions</span>
-                </button>
-            `;
-            document.body.appendChild(popover);
+        // A tap on a native trigger inside the tray: ST handles the click itself (open + Popper
+        // positioning happen synchronously in that handler). Fold the tray up afterwards.
+        leftForm.addEventListener('click', (e) => {
+            if (!leftPopupOpen) return;
+            if (e.target.closest('#options_button, #extensionsMenuButton')) {
+                setTimeout(() => setLeftPopupOpen(false), 0);
+            }
+        });
 
-            popover.addEventListener('click', (e) => {
-                const item = e.target.closest('.cai-left-pop-item');
-                if (!item) return;
-                e.preventDefault();
-                // Stop here so ST's document-level "click outside closes menu" handler
-                // doesn't immediately close the menu we're about to open.
-                e.stopPropagation();
-                const action = item.getAttribute('data-action');
-                setLeftPopupOpen(false);
-                if (action === 'options') {
-                    document.getElementById('options_button')?.click();
-                } else if (action === 'extensions') {
-                    document.getElementById('extensionsMenuButton')?.click();
-                }
-            });
-
-            document.addEventListener('pointerdown', (e) => {
-                if (!leftPopupOpen) return;
-                if (e.target.closest('#cai-left-merged-btn') || e.target.closest('#cai-left-popover')) return;
-                setLeftPopupOpen(false);
-            }, { passive: true });
-
-            // Viewport changes (keyboard in/out, rotation) would leave a fixed popover floating
-            // in the wrong place, so just close it.
-            window.addEventListener('resize', () => {
-                if (leftPopupOpen) setLeftPopupOpen(false);
-            }, { passive: true });
-        }
+        document.addEventListener('pointerdown', (e) => {
+            if (!leftPopupOpen) return;
+            if (e.target.closest('#cai-left-merged-btn, #options_button, #extensionsMenuButton')) return;
+            setLeftPopupOpen(false);
+        }, { passive: true });
     }
 
     function observeDrawers() {

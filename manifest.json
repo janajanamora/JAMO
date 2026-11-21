@@ -6,7 +6,7 @@
     "js": "index.js",
     "css": "style.css",
     "author": "Custom",
-    "version": "1.4.1",
+    "version": "1.5.0",
     "description": "Character.AI-style title bar (avatar + name, mounted in-place inside #top-settings-holder), merged '+' input button, 'Message {{char}}...' placeholder, bundled offline fonts (Open Sans / Fira Sans).",
     "homePage": ""
 }
