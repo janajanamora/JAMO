@@ -1,4 +1,4 @@
-# Cai Header Bar (SillyTavern / TauriTavern Extension) v1.5.0
+# Cai Header Bar (SillyTavern / TauriTavern Extension) v1.6.0
 
 为 SillyTavern / TauriTavern（iOS）提供仿 Character.AI 的顶栏与底部输入体验，配合 `Cai-Inspired Mod (iOS Polished)` 主题使用效果最好。
 
@@ -9,6 +9,7 @@
 - **底部 `+`**：把 ☰ 聊天选项 与 🪄 扩展菜单 收进一个按钮。点 `+` 会把 ST 原生的两个按钮以小托盘形式弹出，点的是真按钮（不再转发点击，修复 iOS 上 Chat Options 闪退）。
 - **占位文案**：`Message {{char}}...` / `给 {{char}} 发消息` / 隐藏。断开 API 时保留 ST 原本的 “Not connected” 提示；关闭扩展会还原原文案。
 - **本地字体（无外链）**：c.ai 同款 Open Sans / Lion 原版 Fira Sans / 跟随主题，扩展设置里切换。字体文件在 `fonts/`，SIL OFL 授权。
+- **批量清理聊天**：🪄 扩展菜单 → **Clean up chats**（或扩展设置里的按钮、`/cai-clean`）。列出当前角色所有聊天文件（日期 / 条数 / 大小，按最新排序），勾选后点两次 Delete 删除。当前打开的那条不能选。群聊不支持。
 - 快捷命令 `/cai-header` 开关整个扩展（万一顶栏出问题也能救回来）。
 
 ## 安装 / 更新（GitHub）

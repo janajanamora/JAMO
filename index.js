@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Cai Header Bar v1.5.0 — SillyTavern / TauriTavern Extension
+   Cai Header Bar v1.6.0 — SillyTavern / TauriTavern Extension
    - #cai-top-header is mounted inside #top-settings-holder (absolute, inset 0),
      so it inherits TauriTavern's native top coordinate. We never touch `top`,
      never add safe-area insets (the iOS host already removed them).
@@ -467,6 +467,9 @@
                             <option value="theme" ${sel('fontMode', 'theme')}>Use theme font</option>
                         </select>
                     </div>
+                    <div class="cai-setting-row">
+                        <div id="cai_open_cleaner" class="menu_button menu_button_icon"><i class="fa-solid fa-broom"></i><span>Clean up chats (current character)</span></div>
+                    </div>
                 </div>
             </div>
         `;
@@ -484,6 +487,266 @@
         bind('#cai_merge_left_buttons', 'mergeLeftButtons', 'checked', applyEnabledState);
         bind('#cai_placeholder_mode', 'placeholderMode', 'value', applyEnabledState);
         bind('#cai_font_mode', 'fontMode', 'value', applyEnabledState);
+        block.querySelector('#cai_open_cleaner').addEventListener('click', () => openCleaner());
+    }
+
+
+    /* ---------------- Chat Cleaner (bulk-delete old chat files) ----------------
+       ST only deletes chats one at a time. This lists the current character's chat
+       files with size / message count / date and deletes the ticked ones through
+       ST's own /api/chats/delete route. The currently open chat can't be selected. */
+
+    const cleaner = { open: false, chats: [], selected: new Set(), armed: false, armTimer: 0, busy: false };
+
+    function escapeHtml(text) {
+        return String(text ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    function stripJsonl(name) {
+        return String(name || '').replace(/\.jsonl$/i, '');
+    }
+
+    function parseSizeToBytes(size) {
+        const m = /([\d.]+)\s*([KMGT]?i?B)/i.exec(String(size || ''));
+        if (!m) return 0;
+        const units = { B: 1, KB: 1024, MB: 1024 ** 2, GB: 1024 ** 3, TB: 1024 ** 4 };
+        return parseFloat(m[1]) * (units[m[2].toUpperCase().replace('I', '')] || 1);
+    }
+
+    function formatBytes(bytes) {
+        if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
+        if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+        if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
+        return `${Math.round(bytes)} B`;
+    }
+
+    function formatDate(value) {
+        const n = Number(value);
+        const d = new Date(Number.isFinite(n) && n > 0 ? n : value);
+        if (Number.isNaN(d.getTime())) return '';
+        return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+    }
+
+    function currentCharacter() {
+        const ctx = getCtx();
+        if (!ctx || ctx.groupId) return null;
+        const ch = ctx.characters?.[ctx.characterId];
+        return ch ? { ctx, ch } : null;
+    }
+
+    async function loadCleanerChats() {
+        const cur = currentCharacter();
+        if (!cur) return [];
+        const response = await fetch('/api/characters/chats', {
+            method: 'POST',
+            headers: cur.ctx.getRequestHeaders(),
+            body: JSON.stringify({ avatar_url: cur.ch.avatar }),
+        });
+        if (!response.ok) throw new Error(`Could not list chats (${response.status})`);
+        const data = await response.json();
+        const list = Array.isArray(data) ? data : Object.values(data || {});
+        const openChat = stripJsonl(cur.ch.chat);
+        return list
+            .filter((c) => c && c.file_name)
+            .map((c) => ({
+                stem: stripJsonl(c.file_name),
+                size: c.file_size || '',
+                bytes: parseSizeToBytes(c.file_size),
+                count: Number(c.chat_items ?? c.message_count ?? 0),
+                last: c.last_mes,
+                isOpen: stripJsonl(c.file_name) === openChat,
+            }))
+            .sort((a, b) => (Number(b.last) || 0) - (Number(a.last) || 0));
+    }
+
+    function disarmDelete() {
+        cleaner.armed = false;
+        clearTimeout(cleaner.armTimer);
+    }
+
+    function renderCleaner(message) {
+        const root = document.getElementById('cai-cleaner');
+        if (!root) return;
+        const cur = currentCharacter();
+        const list = root.querySelector('.cai-cleaner-list');
+        const title = root.querySelector('.cai-cleaner-title');
+        const summary = root.querySelector('.cai-cleaner-summary');
+        const delBtn = root.querySelector('.cai-cleaner-delete');
+
+        title.textContent = cur ? `Clean up chats — ${cur.ch.name}` : 'Clean up chats';
+
+        if (message) {
+            list.innerHTML = `<div class="cai-cleaner-empty">${escapeHtml(message)}</div>`;
+        } else if (!cleaner.chats.length) {
+            list.innerHTML = '<div class="cai-cleaner-empty">No chat files.</div>';
+        } else {
+            list.innerHTML = cleaner.chats.map((c, i) => `
+                <label class="cai-cleaner-row${c.isOpen ? ' is-open' : ''}${cleaner.selected.has(c.stem) ? ' is-checked' : ''}">
+                    <input type="checkbox" data-i="${i}" ${c.isOpen ? 'disabled' : ''} ${cleaner.selected.has(c.stem) ? 'checked' : ''} />
+                    <span class="cai-cleaner-info">
+                        <span class="cai-cleaner-name">${escapeHtml(c.stem)}</span>
+                        <span class="cai-cleaner-meta">${c.isOpen ? '<b>open now</b> · ' : ''}${escapeHtml(formatDate(c.last))} · ${c.count} msgs · ${escapeHtml(c.size)}</span>
+                    </span>
+                </label>`).join('');
+        }
+
+        const picked = cleaner.chats.filter((c) => cleaner.selected.has(c.stem));
+        const total = picked.reduce((sum, c) => sum + c.bytes, 0);
+        summary.textContent = picked.length ? `${picked.length} selected · ${formatBytes(total)}` : `${cleaner.chats.length} chats`;
+        delBtn.disabled = !picked.length || cleaner.busy;
+        delBtn.classList.toggle('is-armed', cleaner.armed);
+        delBtn.textContent = cleaner.busy
+            ? 'Deleting…'
+            : cleaner.armed
+                ? `Tap again to delete ${picked.length}`
+                : `Delete${picked.length ? ` ${picked.length}` : ''}`;
+    }
+
+    async function refreshCleaner() {
+        disarmDelete();
+        cleaner.selected.clear();
+        const cur = currentCharacter();
+        if (!cur) {
+            cleaner.chats = [];
+            renderCleaner('Open a single-character chat first (group chats aren’t supported).');
+            return;
+        }
+        renderCleaner('Loading…');
+        try {
+            cleaner.chats = await loadCleanerChats();
+            renderCleaner();
+        } catch (error) {
+            cleaner.chats = [];
+            renderCleaner(error.message || String(error));
+        }
+    }
+
+    async function deleteSelectedChats() {
+        const cur = currentCharacter();
+        if (!cur || cleaner.busy) return;
+        const targets = cleaner.chats.filter((c) => cleaner.selected.has(c.stem) && !c.isOpen);
+        if (!targets.length) return;
+
+        cleaner.busy = true;
+        disarmDelete();
+        renderCleaner();
+
+        let ok = 0;
+        const failed = [];
+        for (const c of targets) {
+            try {
+                const response = await fetch('/api/chats/delete', {
+                    method: 'POST',
+                    headers: cur.ctx.getRequestHeaders(),
+                    body: JSON.stringify({ chatfile: `${c.stem}.jsonl`, avatar_url: cur.ch.avatar }),
+                });
+                if (!response.ok) throw new Error(String(response.status));
+                ok += 1;
+                try {
+                    await cur.ctx.eventSource?.emit?.(cur.ctx.eventTypes?.CHAT_DELETED, c.stem);
+                } catch { /* other listeners' problem */ }
+            } catch {
+                failed.push(c.stem);
+            }
+        }
+
+        cleaner.busy = false;
+        const toast = window.toastr;
+        if (failed.length) {
+            toast?.warning?.(`Deleted ${ok}, failed ${failed.length}`);
+        } else {
+            toast?.success?.(`Deleted ${ok} chat${ok === 1 ? '' : 's'}`);
+        }
+        await refreshCleaner();
+    }
+
+    function ensureCleanerDom() {
+        if (document.getElementById('cai-cleaner')) return;
+        const root = document.createElement('div');
+        root.id = 'cai-cleaner';
+        root.innerHTML = `
+            <div class="cai-cleaner-sheet" role="dialog" aria-modal="true" aria-label="Clean up chats">
+                <div class="cai-cleaner-head">
+                    <span class="cai-cleaner-title">Clean up chats</span>
+                    <button type="button" class="cai-cleaner-x" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="cai-cleaner-tools">
+                    <button type="button" data-act="old">Select all except open</button>
+                    <button type="button" data-act="none">Select none</button>
+                    <span class="cai-cleaner-summary"></span>
+                </div>
+                <div class="cai-cleaner-list"></div>
+                <div class="cai-cleaner-foot">
+                    <span class="cai-cleaner-note">Deleted chats can't be restored on this device.</span>
+                    <button type="button" class="cai-cleaner-delete" disabled>Delete</button>
+                </div>
+            </div>`;
+        document.body.appendChild(root);
+
+        root.addEventListener('click', (e) => {
+            if (e.target === root || e.target.closest('.cai-cleaner-x')) {
+                closeCleaner();
+                return;
+            }
+            const act = e.target.closest('[data-act]')?.getAttribute('data-act');
+            if (act === 'old') {
+                cleaner.chats.forEach((c) => { if (!c.isOpen) cleaner.selected.add(c.stem); });
+                disarmDelete();
+                renderCleaner();
+            } else if (act === 'none') {
+                cleaner.selected.clear();
+                disarmDelete();
+                renderCleaner();
+            } else if (e.target.closest('.cai-cleaner-delete')) {
+                if (!cleaner.armed) {
+                    cleaner.armed = true;
+                    clearTimeout(cleaner.armTimer);
+                    cleaner.armTimer = setTimeout(() => { disarmDelete(); renderCleaner(); }, 4000);
+                    renderCleaner();
+                } else {
+                    deleteSelectedChats();
+                }
+            }
+        });
+
+        root.addEventListener('change', (e) => {
+            const box = e.target.closest('input[type="checkbox"][data-i]');
+            if (!box) return;
+            const chat = cleaner.chats[Number(box.getAttribute('data-i'))];
+            if (!chat || chat.isOpen) return;
+            if (box.checked) cleaner.selected.add(chat.stem); else cleaner.selected.delete(chat.stem);
+            disarmDelete();
+            renderCleaner();
+        });
+    }
+
+    function openCleaner() {
+        ensureCleanerDom();
+        cleaner.open = true;
+        document.body.classList.add('cai-cleaner-open');
+        refreshCleaner();
+    }
+
+    function closeCleaner() {
+        cleaner.open = false;
+        disarmDelete();
+        document.body.classList.remove('cai-cleaner-open');
+    }
+
+    function addCleanerMenuItem(attempt = 0) {
+        if (document.getElementById('cai_chat_cleaner_item')) return;
+        const menu = document.getElementById('extensionsMenu');
+        if (!menu) {
+            if (attempt < 40) setTimeout(() => addCleanerMenuItem(attempt + 1), 500);
+            return;
+        }
+        const item = document.createElement('div');
+        item.id = 'cai_chat_cleaner_item';
+        item.className = 'list-group-item flex-container flexGap5 interactable';
+        item.tabIndex = 0;
+        item.innerHTML = '<div class="fa-solid fa-broom extensionsMenuExtensionButton"></div><span>Clean up chats</span>';
+        item.addEventListener('click', () => openCleaner());
+        menu.appendChild(item);
     }
 
     function registerQuickToggleCommand() {
@@ -505,6 +768,11 @@
                     return s.enabled ? 'enabled' : 'disabled';
                 },
                 helpString: 'Toggle Cai Header Bar on/off.',
+            }));
+            Parser.addCommandObject(Cmd.fromProps({
+                name: 'cai-clean',
+                callback: () => { openCleaner(); return ''; },
+                helpString: 'Open the chat cleaner for the current character.',
             }));
         } catch {
             // Already registered
@@ -530,6 +798,7 @@
             eventSource.on(evt, () => {
                 updateHeader();
                 syncDrawerState();
+                if (cleaner.open && evt === eventTypes.CHAT_CHANGED) refreshCleaner();
             });
         }
     }
@@ -545,6 +814,7 @@
         observePlaceholder();
         bindEvents();
         registerQuickToggleCommand();
+        addCleanerMenuItem();
         applyEnabledState();
 
         setTimeout(updateHeader, 450);
